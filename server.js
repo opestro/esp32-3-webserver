@@ -4,15 +4,13 @@ const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcrypt');
 const helmet = require('helmet');
 const compression = require('compression');
 const path = require('path');
 
 // Configuration
 const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || '123456789';
+// Simple API key for ESP32 - for minimal protection
 const DEVICE_API_KEY = process.env.DEVICE_API_KEY || '123456789';
 
 // Create Express app
@@ -26,13 +24,15 @@ const io = socketIo(server, {
 });
 
 // Middleware
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: false, // Disable CSP for testing
+}));
 app.use(compression());
 app.use(cors());
 app.use(bodyParser.json());
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
 
-// In-memory data store (replace with MongoDB in production)
+// In-memory data store
 const dataStore = {
   sensorData: [],
   ledState: {
@@ -43,15 +43,6 @@ const dataStore = {
     effect: "solid"
   },
   pendingCommands: [],
-  users: [
-    // Default admin user - change in production!
-    {
-      username: 'admin',
-      // Default password: 'admin123'
-      passwordHash: '$2b$10$eCc0KVXjKXYMkWNbpYHwB.Dh5hkFV3UVvhvzLk4/aQDJ0Ey1Mgkxm',
-      role: 'admin'
-    }
-  ],
   maxDataPoints: 1000
 };
 
@@ -61,24 +52,22 @@ let lastEspData = null;
 let espConnected = false;
 let lastEspCheck = Date.now();
 
-// Authentication middleware for web clients
-const authenticateUser = (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1];
+// Simulate initial sensor data if none exists
+if (!lastEspData) {
+  lastEspData = {
+    temperature: 22.5,
+    humidity: 45.0,
+    timestamp: Date.now(),
+    status: "simulated"
+  };
   
-  if (!token) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
+  // Add to history
+  dataStore.sensorData.push({...lastEspData});
   
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded;
-    next();
-  } catch (error) {
-    return res.status(401).json({ error: 'Invalid token' });
-  }
-};
+  console.log("Initialized with simulated sensor data");
+}
 
-// Authentication middleware for ESP32 device
+// Simple authentication for ESP32 device
 const authenticateDevice = (req, res, next) => {
   const apiKey = req.headers['x-api-key'];
   
@@ -90,29 +79,6 @@ const authenticateDevice = (req, res, next) => {
 };
 
 // Routes
-
-// Login route for web clients
-app.post('/api/login', async (req, res) => {
-  const { username, password } = req.body;
-  
-  const user = dataStore.users.find(u => u.username === username);
-  if (!user) {
-    return res.status(401).json({ error: 'Invalid credentials' });
-  }
-  
-  const passwordMatch = await bcrypt.compare(password, user.passwordHash);
-  if (!passwordMatch) {
-    return res.status(401).json({ error: 'Invalid credentials' });
-  }
-  
-  const token = jwt.sign(
-    { username, role: user.role },
-    JWT_SECRET,
-    { expiresIn: '24h' }
-  );
-  
-  res.json({ token, username, role: user.role });
-});
 
 // ESP32 sends sensor data to this endpoint
 app.post('/api/device/data', authenticateDevice, (req, res) => {
@@ -166,7 +132,7 @@ app.get('/api/device/commands', authenticateDevice, (req, res) => {
   });
 });
 
-// Web clients get sensor data
+// Public API: Get latest sensor data
 app.get('/api/sensor-data', (req, res) => {
   if (lastEspData) {
     res.json({
@@ -179,7 +145,7 @@ app.get('/api/sensor-data', (req, res) => {
   }
 });
 
-// Get historical data
+// Public API: Get historical data
 app.get('/api/history', (req, res) => {
   // Optional: filter by time range
   const { hours } = req.query;
@@ -193,7 +159,7 @@ app.get('/api/history', (req, res) => {
   res.json(filteredData);
 });
 
-// Web clients control LED
+// Public API: Control LED
 app.post('/api/led', (req, res) => {
   const ledData = req.body;
   console.log('Setting LED:', ledData);
@@ -220,12 +186,12 @@ app.post('/api/led', (req, res) => {
   });
 });
 
-// Get LED status
+// Public API: Get LED status
 app.get('/api/led-status', (req, res) => {
   res.json(dataStore.ledState);
 });
 
-// System status
+// Public API: System status
 app.get('/api/status', (req, res) => {
   res.json({
     espConnected,
@@ -237,15 +203,49 @@ app.get('/api/status', (req, res) => {
   });
 });
 
-// Admin routes (protected)
-app.get('/api/admin/users', authenticateUser, (req, res) => {
-  if (req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Unauthorized' });
+// Public API: Test endpoint
+app.get('/api/test', (req, res) => {
+  res.json({
+    message: 'API is working!',
+    timestamp: Date.now(),
+    serverTime: new Date().toISOString()
+  });
+});
+
+// Add a route to simulate data for testing
+app.get('/api/simulate', (req, res) => {
+  // Generate random temperature and humidity
+  const temperature = 20 + Math.random() * 10; // 20-30°C
+  const humidity = 40 + Math.random() * 20; // 40-60%
+  
+  const sensorData = {
+    temperature,
+    humidity,
+    timestamp: Date.now(),
+    status: "simulated"
+  };
+  
+  // Update last contact info
+  lastEspData = sensorData;
+  lastEspCheck = Date.now();
+  espConnected = true;
+  
+  // Store data
+  dataStore.sensorData.push(sensorData);
+  
+  // Limit stored data
+  if (dataStore.sensorData.length > dataStore.maxDataPoints) {
+    dataStore.sensorData.shift();
   }
   
-  // Return user list without password hashes
-  const users = dataStore.users.map(({ username, role }) => ({ username, role }));
-  res.json(users);
+  // Broadcast to all connected clients
+  io.emit('sensor-update', sensorData);
+  
+  res.json({
+    status: 'ok',
+    message: 'Simulated data generated',
+    data: sensorData
+  });
 });
 
 // Serve the frontend
@@ -302,7 +302,15 @@ setInterval(() => {
 
 // Start the server
 server.listen(PORT, () => {
-  console.log(`Cloud bridge server running at http://localhost:${PORT}`);
+  console.log(`🚀 Testing server running at http://localhost:${PORT}`);
+  console.log(`📊 Public API endpoints available for testing:`);
+  console.log(`   - GET  /api/sensor-data`);
+  console.log(`   - GET  /api/history`);
+  console.log(`   - GET  /api/led-status`);
+  console.log(`   - POST /api/led`);
+  console.log(`   - GET  /api/status`);
+  console.log(`   - GET  /api/test`);
+  console.log(`⚠️  WARNING: Authentication disabled for testing purposes only!`);
 });
 
 // Handle graceful shutdown

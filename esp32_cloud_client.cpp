@@ -14,7 +14,7 @@ const char* ssid = "OnePlus 11R 5G";
 const char* password = "qwerty123";
 
 // Server details
-const char* serverUrl = "https://your-server-url.com"; // Change to your server URL
+const char* serverUrl = "https://ewwgkwskw4skwk0s8owoggws.cscclub.space"; // Change to your server URL
 const char* apiKey = "123456789"; // Must match DEVICE_API_KEY on server
 
 // Global variables
