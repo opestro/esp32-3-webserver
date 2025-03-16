@@ -1,0 +1,17 @@
+{
+  "name": "esp32-sensor-dashboard",
+  "version": "1.0.0",
+  "description": "Dashboard for ESP32 DHT11 sensor data",
+  "main": "webserver.js",
+  "scripts": {
+    "start": "node webserver.js",
+    "dev": "nodemon webserver.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "axios": "^1.6.7"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.3"
+  }
+} 

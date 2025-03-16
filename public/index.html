@@ -1,0 +1,1090 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 Sensor Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .card-hover {
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .card-hover:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        .gauge {
+            width: 100%;
+            max-width: 250px;
+            margin: 0 auto;
+            position: relative;
+            height: 125px;
+            overflow: hidden;
+        }
+        .gauge-body {
+            width: 100%;
+            height: 250px;
+            border-radius: 250px 250px 0 0;
+            background-color: #f3f4f6;
+            position: absolute;
+            top: 0;
+        }
+        .gauge-fill {
+            width: 100%;
+            height: 250px;
+            border-radius: 250px 250px 0 0;
+            background: linear-gradient(to right, #3b82f6, #10b981);
+            position: absolute;
+            top: 125px;
+            transform-origin: center top;
+            transform: rotate(0deg);
+            transition: transform 1s ease-out;
+        }
+        .gauge-cover {
+            width: 75%;
+            height: 187.5px;
+            border-radius: 187.5px 187.5px 0 0;
+            background-color: white;
+            position: absolute;
+            top: 0;
+            left: 12.5%;
+        }
+        .gauge-value {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            text-align: center;
+            font-size: 2rem;
+            font-weight: bold;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        .pulse-animation {
+            animation: pulse 2s infinite;
+        }
+        .data-update {
+            animation: highlight 1s ease-out;
+        }
+        @keyframes highlight {
+            0% { background-color: rgba(59, 130, 246, 0.2); }
+            100% { background-color: transparent; }
+        }
+        .dark-mode {
+            background-color: #1f2937;
+            color: #f3f4f6;
+        }
+        .dark-mode .bg-white {
+            background-color: #374151;
+            color: #f3f4f6;
+        }
+        .dark-mode .text-gray-700 {
+            color: #e5e7eb;
+        }
+        .dark-mode .text-gray-500, .dark-mode .text-gray-600 {
+            color: #9ca3af;
+        }
+        .dark-mode .border-b {
+            border-color: #4b5563;
+        }
+        .dark-mode .hover\:bg-gray-50:hover {
+            background-color: #4b5563;
+        }
+        .weather-icon {
+            font-size: 3rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .glow {
+            text-shadow: 0 0 10px currentColor;
+        }
+        
+        .card-flip {
+            perspective: 1000px;
+            height: 200px;
+        }
+        
+        .card-flip-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            transition: transform 0.8s;
+            transform-style: preserve-3d;
+        }
+        
+        .card-flip:hover .card-flip-inner {
+            transform: rotateY(180deg);
+        }
+        
+        .card-flip-front, .card-flip-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            border-radius: 0.5rem;
+        }
+        
+        .card-flip-back {
+            transform: rotateY(180deg);
+        }
+        
+        .progress-bar {
+            height: 8px;
+            border-radius: 4px;
+            background: #e5e7eb;
+            overflow: hidden;
+            margin: 8px 0;
+        }
+        
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(to right, #3b82f6, #10b981);
+            transition: width 0.5s ease;
+        }
+        
+        .floating {
+            animation: floating 3s ease-in-out infinite;
+        }
+        
+        @keyframes floating {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0px); }
+        }
+        
+        .shake {
+            animation: shake 0.5s;
+        }
+        
+        @keyframes shake {
+            0% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            50% { transform: translateX(5px); }
+            75% { transform: translateX(-5px); }
+            100% { transform: translateX(0); }
+        }
+        
+        .confetti {
+            position: fixed;
+            width: 10px;
+            height: 10px;
+            background-color: #f00;
+            opacity: 0;
+            animation: confetti-fall 3s ease-in-out forwards;
+            z-index: 1000;
+        }
+        
+        @keyframes confetti-fall {
+            0% { transform: translateY(-100vh) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+        }
+        
+        .tooltip {
+            position: relative;
+            display: inline-block;
+        }
+        
+        .tooltip .tooltip-text {
+            visibility: hidden;
+            width: 120px;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 5px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -60px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        
+        .tooltip:hover .tooltip-text {
+            visibility: visible;
+            opacity: 1;
+        }
+        
+        .gradient-text {
+            background: linear-gradient(45deg, #3b82f6, #10b981);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            animation: gradient-shift 3s ease infinite;
+            background-size: 200% 200%;
+        }
+        
+        @keyframes gradient-shift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        
+        .dark-mode .gauge-cover {
+            background-color: #374151;
+        }
+        
+        .dark-mode .gauge-body {
+            background-color: #1f2937;
+        }
+        
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            background-color: white;
+            border-left: 4px solid #10b981;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border-radius: 4px;
+            z-index: 1000;
+            transform: translateX(120%);
+            transition: transform 0.3s ease;
+        }
+        
+        .notification.show {
+            transform: translateX(0);
+        }
+        
+        .dark-mode .notification {
+            background-color: #374151;
+            color: #f3f4f6;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-bold text-gray-800">ESP32 Sensor Dashboard</h1>
+            <div class="flex space-x-4">
+                <button id="darkModeToggle" class="bg-gray-800 text-white p-2 rounded-full">
+                    <i class="fas fa-moon"></i>
+                </button>
+                <button id="fullscreenToggle" class="bg-blue-500 text-white p-2 rounded-full">
+                    <i class="fas fa-expand"></i>
+                </button>
+            </div>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl mx-auto">
+            <div class="bg-white rounded-lg shadow-md p-6 card-hover">
+                <h2 class="text-xl font-semibold mb-4 text-gray-700">Temperature</h2>
+                <div class="gauge mb-4">
+                    <div class="gauge-body"></div>
+                    <div id="temperatureGauge" class="gauge-fill"></div>
+                    <div class="gauge-cover"></div>
+                    <div class="gauge-value">
+                        <span id="temperature">--</span>°C
+                    </div>
+                </div>
+                <div class="flex justify-between text-sm text-gray-500 mt-2">
+                    <span>0°C</span>
+                    <span>25°C</span>
+                    <span>50°C</span>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow-md p-6 card-hover">
+                <h2 class="text-xl font-semibold mb-4 text-gray-700">Humidity</h2>
+                <div class="gauge mb-4">
+                    <div class="gauge-body"></div>
+                    <div id="humidityGauge" class="gauge-fill"></div>
+                    <div class="gauge-cover"></div>
+                    <div class="gauge-value">
+                        <span id="humidity">--</span>%
+                    </div>
+                </div>
+                <div class="flex justify-between text-sm text-gray-500 mt-2">
+                    <span>0%</span>
+                    <span>50%</span>
+                    <span>100%</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status Indicators -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto mt-8">
+            <div class="bg-white rounded-lg shadow-md p-4 text-center">
+                <i class="fas fa-thermometer-half text-red-500 text-2xl mb-2"></i>
+                <p class="text-gray-700 font-semibold">Status</p>
+                <p id="tempStatus" class="text-gray-600">Normal</p>
+            </div>
+            <div class="bg-white rounded-lg shadow-md p-4 text-center">
+                <i class="fas fa-tint text-blue-500 text-2xl mb-2"></i>
+                <p class="text-gray-700 font-semibold">Status</p>
+                <p id="humidityStatus" class="text-gray-600">Normal</p>
+            </div>
+            <div class="bg-white rounded-lg shadow-md p-4 text-center">
+                <i class="fas fa-wifi text-green-500 text-2xl mb-2"></i>
+                <p class="text-gray-700 font-semibold">Connection</p>
+                <p id="connectionStatus" class="text-gray-600">Online</p>
+            </div>
+            <div class="bg-white rounded-lg shadow-md p-4 text-center">
+                <i class="fas fa-clock text-purple-500 text-2xl mb-2"></i>
+                <p class="text-gray-700 font-semibold">Uptime</p>
+                <p id="uptime" class="text-gray-600">--</p>
+            </div>
+        </div>
+
+        <!-- Weather Condition Card -->
+        <div class="max-w-4xl mx-auto mt-8">
+            <div class="bg-white rounded-lg shadow-md p-6 card-hover">
+                <h2 class="text-xl font-semibold mb-4 text-gray-700">Environmental Condition</h2>
+                <div class="flex items-center justify-center">
+                    <div id="weatherIcon" class="weather-icon text-yellow-500 mr-6">
+                        <i class="fas fa-sun floating"></i>
+                    </div>
+                    <div>
+                        <p class="text-2xl font-bold gradient-text" id="weatherCondition">Comfortable</p>
+                        <p class="text-gray-600" id="weatherDescription">Ideal temperature and humidity</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Section -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-6xl mx-auto mt-8">
+            <div class="bg-white rounded-lg shadow-md p-6 card-hover">
+                <h2 class="text-xl font-semibold mb-4 text-gray-700">Temperature History</h2>
+                <div style="height: 300px;">
+                    <canvas id="temperatureChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow-md p-6 card-hover">
+                <h2 class="text-xl font-semibold mb-4 text-gray-700">Humidity History</h2>
+                <div style="height: 300px;">
+                    <canvas id="humidityChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Flip Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto mt-8">
+            <div class="card-flip">
+                <div class="card-flip-inner">
+                    <div class="card-flip-front bg-white rounded-lg shadow-md p-6 flex flex-col justify-center items-center">
+                        <i class="fas fa-info-circle text-blue-500 text-4xl mb-4"></i>
+                        <h3 class="text-xl font-semibold text-gray-700">Sensor Information</h3>
+                        <p class="text-gray-600 mt-2">Hover to see details</p>
+                    </div>
+                    <div class="card-flip-back bg-blue-500 text-white rounded-lg shadow-md p-6">
+                        <h3 class="text-xl font-semibold mb-4">DHT11 Sensor</h3>
+                        <ul class="list-disc pl-5 space-y-2">
+                            <li>Temperature Range: 0-50°C</li>
+                            <li>Humidity Range: 20-90%</li>
+                            <li>Accuracy: ±2°C, ±5% RH</li>
+                            <li>Resolution: 1°C, 1% RH</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card-flip">
+                <div class="card-flip-inner">
+                    <div class="card-flip-front bg-white rounded-lg shadow-md p-6 flex flex-col justify-center items-center">
+                        <i class="fas fa-microchip text-green-500 text-4xl mb-4"></i>
+                        <h3 class="text-xl font-semibold text-gray-700">ESP32 Information</h3>
+                        <p class="text-gray-600 mt-2">Hover to see details</p>
+                    </div>
+                    <div class="card-flip-back bg-green-500 text-white rounded-lg shadow-md p-6">
+                        <h3 class="text-xl font-semibold mb-4">ESP32-S3</h3>
+                        <ul class="list-disc pl-5 space-y-2">
+                            <li>Dual-core processor</li>
+                            <li>WiFi + Bluetooth LE</li>
+                            <li>GPIO: 45 programmable pins</li>
+                            <li>Flash: 4MB</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Progress Bars -->
+        <div class="max-w-4xl mx-auto mt-8">
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-xl font-semibold mb-4 text-gray-700">Sensor Performance</h2>
+                
+                <div class="mb-4">
+                    <div class="flex justify-between">
+                        <span class="text-gray-700">Signal Strength</span>
+                        <span class="text-gray-700" id="signalStrength">85%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-bar-fill" style="width: 85%"></div>
+                    </div>
+                </div>
+                
+                <div class="mb-4">
+                    <div class="flex justify-between">
+                        <span class="text-gray-700">Battery Level</span>
+                        <span class="text-gray-700" id="batteryLevel">100%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-bar-fill" style="width: 100%"></div>
+                    </div>
+                </div>
+                
+                <div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-700">Data Quality</span>
+                        <span class="text-gray-700" id="dataQuality">95%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-bar-fill" style="width: 95%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Add this section after the Progress Bars section -->
+        <div class="max-w-4xl mx-auto mt-8">
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-xl font-semibold mb-4 text-gray-700">RGB LED Control</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <div class="mb-4">
+                            <label for="colorPicker" class="block text-gray-700 mb-2">Select Color</label>
+                            <input type="color" id="colorPicker" class="w-full h-12 rounded cursor-pointer" value="#00ff00">
+                        </div>
+                        
+                        <div class="mb-4">
+                            <label class="block text-gray-700 mb-2">Brightness: <span id="brightnessValue">128</span></label>
+                            <input type="range" id="brightnessSlider" min="0" max="255" value="128" class="w-full">
+                        </div>
+                        
+                        <div class="mb-4">
+                            <label class="block text-gray-700 mb-2">Effect</label>
+                            <select id="ledEffect" class="w-full p-2 border rounded">
+                                <option value="solid">Solid</option>
+                                <option value="blink">Blink</option>
+                                <option value="breathe">Breathe</option>
+                                <option value="rainbow">Rainbow</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="flex flex-col items-center justify-center">
+                        <div id="ledPreview" class="w-32 h-32 rounded-full mb-4 shadow-lg" style="background-color: #00ff00; box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);"></div>
+                        
+                        <div class="grid grid-cols-3 gap-2">
+                            <button onclick="setPresetColor('#ff0000')" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded">
+                                Red
+                            </button>
+                            <button onclick="setPresetColor('#00ff00')" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">
+                                Green
+                            </button>
+                            <button onclick="setPresetColor('#0000ff')" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">
+                                Blue
+                            </button>
+                            <button onclick="setPresetColor('#ffff00')" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded">
+                                Yellow
+                            </button>
+                            <button onclick="setPresetColor('#ff00ff')" class="bg-pink-500 hover:bg-pink-600 text-white font-bold py-2 px-4 rounded">
+                                Pink
+                            </button>
+                            <button onclick="setPresetColor('#00ffff')" class="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-2 px-4 rounded">
+                                Cyan
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mt-4 text-center">
+                    <button id="applyLedButton" class="bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-6 rounded transition duration-300 ease-in-out transform hover:scale-105">
+                        <i class="fas fa-lightbulb mr-2"></i> Apply LED Settings
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Last Updated -->
+        <div class="text-center mt-6 text-gray-600">
+            <p>Last updated: <span id="lastUpdated">--</span></p>
+        </div>
+
+        <!-- Controls -->
+        <div class="text-center mt-4 space-x-4">
+            <button onclick="fetchData()" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded transition duration-300 ease-in-out transform hover:scale-105">
+                <i class="fas fa-sync-alt mr-2"></i> Refresh Data
+            </button>
+            <button id="pauseButton" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded transition duration-300 ease-in-out transform hover:scale-105">
+                <i class="fas fa-pause mr-2"></i> Pause Updates
+            </button>
+        </div>
+
+        <!-- Error Message -->
+        <div id="error-message" class="hidden mt-4 text-red-500 text-center p-4 bg-red-100 rounded-lg">
+            <i class="fas fa-exclamation-triangle mr-2"></i>
+            <span id="error-text">Failed to fetch sensor data</span>
+        </div>
+
+        <!-- Data Log Section -->
+        <div class="max-w-4xl mx-auto mt-8">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold text-gray-700">Sensor Data Log</h2>
+                <button id="clearLogButton" class="text-red-500 hover:text-red-700">
+                    <i class="fas fa-trash-alt mr-1"></i> Clear Log
+                </button>
+            </div>
+            <div class="bg-white rounded-lg shadow-md p-4 max-h-64 overflow-y-auto">
+                <table class="min-w-full">
+                    <thead>
+                        <tr class="border-b">
+                            <th class="text-left py-2 px-4">Timestamp</th>
+                            <th class="text-left py-2 px-4">Temperature</th>
+                            <th class="text-left py-2 px-4">Humidity</th>
+                            <th class="text-left py-2 px-4">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dataLog">
+                        <!-- Log entries will be added here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification -->
+    <div id="notification" class="notification">
+        <div class="flex items-center">
+            <i class="fas fa-bell mr-3 text-green-500"></i>
+            <div>
+                <p class="font-semibold" id="notification-title">Update</p>
+                <p id="notification-message">New data received</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize data arrays for charts
+        const maxDataPoints = 20;
+        const temperatureData = {
+            labels: [],
+            datasets: [{
+                label: 'Temperature (°C)',
+                backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                borderColor: 'rgba(59, 130, 246, 1)',
+                borderWidth: 2,
+                data: [],
+                tension: 0.4,
+                pointRadius: 4,
+                pointHoverRadius: 6
+            }]
+        };
+        
+        const humidityData = {
+            labels: [],
+            datasets: [{
+                label: 'Humidity (%)',
+                backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                borderColor: 'rgba(16, 185, 129, 1)',
+                borderWidth: 2,
+                data: [],
+                tension: 0.4,
+                pointRadius: 4,
+                pointHoverRadius: 6
+            }]
+        };
+        
+        // Chart configuration
+        const chartConfig = {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top'
+                },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                    titleFont: {
+                        size: 14
+                    },
+                    bodyFont: {
+                        size: 14
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: false,
+                    suggestedMin: 0,
+                    suggestedMax: 50,  // For temperature
+                    ticks: {
+                        stepSize: 5
+                    },
+                    grid: {
+                        color: 'rgba(0, 0, 0, 0.05)'
+                    }
+                },
+                x: {
+                    grid: {
+                        color: 'rgba(0, 0, 0, 0.05)'
+                    }
+                }
+            },
+            animation: {
+                duration: 1000,
+                easing: 'easeOutQuart'
+            },
+            interaction: {
+                mode: 'nearest',
+                axis: 'x',
+                intersect: false
+            }
+        };
+        
+        // Separate config for humidity chart with different max
+        const humidityChartConfig = {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top'
+                },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                    titleFont: {
+                        size: 14
+                    },
+                    bodyFont: {
+                        size: 14
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: false,
+                    suggestedMin: 0,
+                    suggestedMax: 100,  // For humidity (0-100%)
+                    ticks: {
+                        stepSize: 10
+                    },
+                    grid: {
+                        color: 'rgba(0, 0, 0, 0.05)'
+                    }
+                },
+                x: {
+                    grid: {
+                        color: 'rgba(0, 0, 0, 0.05)'
+                    }
+                }
+            },
+            animation: {
+                duration: 1000,
+                easing: 'easeOutQuart'
+            },
+            interaction: {
+                mode: 'nearest',
+                axis: 'x',
+                intersect: false
+            }
+        };
+        
+        // Initialize charts
+        const temperatureChart = new Chart(
+            document.getElementById('temperatureChart'),
+            {
+                type: 'line',
+                data: temperatureData,
+                options: chartConfig
+            }
+        );
+        
+        const humidityChart = new Chart(
+            document.getElementById('humidityChart'),
+            {
+                type: 'line',
+                data: humidityData,
+                options: humidityChartConfig
+            }
+        );
+        
+        // Format timestamp
+        function formatTimestamp(timestamp) {
+            const date = new Date(timestamp);
+            return date.toLocaleTimeString();
+        }
+        
+        // Update gauge display
+        function updateGauge(id, value, max) {
+            const gauge = document.getElementById(id);
+            const percentage = Math.min(Math.max(value / max, 0), 1);
+            const degrees = percentage * 180;
+            gauge.style.transform = `rotate(${degrees}deg)`;
+        }
+        
+        // Determine status based on values
+        function getTemperatureStatus(temp) {
+            if (temp < 10) return { text: "Cold", class: "text-blue-500" };
+            if (temp > 35) return { text: "Hot", class: "text-red-500" };
+            return { text: "Normal", class: "text-green-500" };
+        }
+        
+        function getHumidityStatus(humidity) {
+            if (humidity < 30) return { text: "Dry", class: "text-yellow-500" };
+            if (humidity > 70) return { text: "Humid", class: "text-blue-500" };
+            return { text: "Normal", class: "text-green-500" };
+        }
+        
+        // Add data to charts
+        function addDataToCharts(timestamp, temperature, humidity) {
+            const timeLabel = formatTimestamp(timestamp);
+            
+            // Add data to temperature chart
+            temperatureData.labels.push(timeLabel);
+            temperatureData.datasets[0].data.push(temperature);
+            
+            // Add data to humidity chart
+            humidityData.labels.push(timeLabel);
+            humidityData.datasets[0].data.push(humidity);
+            
+            // Limit the number of data points
+            if (temperatureData.labels.length > maxDataPoints) {
+                temperatureData.labels.shift();
+                temperatureData.datasets[0].data.shift();
+                humidityData.labels.shift();
+                humidityData.datasets[0].data.shift();
+            }
+            
+            // Update charts
+            temperatureChart.update();
+            humidityChart.update();
+        }
+        
+        // Add entry to data log
+        function addLogEntry(timestamp, temperature, humidity) {
+            const logTable = document.getElementById('dataLog');
+            const row = document.createElement('tr');
+            row.className = 'border-b hover:bg-gray-50 data-update';
+            
+            const formattedTime = new Date(timestamp).toLocaleString();
+            const tempStatus = getTemperatureStatus(temperature);
+            const humStatus = getHumidityStatus(humidity);
+            const status = temperature > 35 || humidity > 80 ? "Warning" : "Normal";
+            const statusClass = status === "Warning" ? "text-red-500" : "text-green-500";
+            
+            row.innerHTML = `
+                <td class="py-2 px-4">${formattedTime}</td>
+                <td class="py-2 px-4">${temperature.toFixed(1)} °C</td>
+                <td class="py-2 px-4">${humidity.toFixed(1)} %</td>
+                <td class="py-2 px-4 ${statusClass} font-semibold">${status}</td>
+            `;
+            
+            // Add to the beginning of the table
+            logTable.insertBefore(row, logTable.firstChild);
+            
+            // Limit the number of log entries
+            if (logTable.children.length > 50) {
+                logTable.removeChild(logTable.lastChild);
+            }
+        }
+        
+        // Update uptime
+        function updateUptime() {
+            const uptimeElement = document.getElementById('uptime');
+            const startTime = window.startTime || (window.startTime = Date.now());
+            const elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
+            
+            const hours = Math.floor(elapsedSeconds / 3600);
+            const minutes = Math.floor((elapsedSeconds % 3600) / 60);
+            const seconds = elapsedSeconds % 60;
+            
+            uptimeElement.textContent = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+        
+        let updatePaused = false;
+        let updateInterval;
+        
+        function fetchData() {
+            if (updatePaused) return;
+            
+            fetch('/sensor-data')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+                    document.getElementById('connectionStatus').textContent = 'Online';
+                    document.getElementById('connectionStatus').className = 'text-green-500';
+                    return response.json();
+                })
+                .then(data => {
+                    // Update current values with animation
+                    const tempElement = document.getElementById('temperature');
+                    const humElement = document.getElementById('humidity');
+                    
+                    tempElement.textContent = data.temperature.toFixed(1);
+                    humElement.textContent = data.humidity.toFixed(1);
+                    
+                    tempElement.classList.add('pulse-animation');
+                    humElement.classList.add('pulse-animation');
+                    
+                    setTimeout(() => {
+                        tempElement.classList.remove('pulse-animation');
+                        humElement.classList.remove('pulse-animation');
+                    }, 2000);
+                    
+                    // Update gauges
+                    updateGauge('temperatureGauge', data.temperature, 50);
+                    updateGauge('humidityGauge', data.humidity, 100);
+                    
+                    // Update status indicators
+                    const tempStatus = getTemperatureStatus(data.temperature);
+                    const humStatus = getHumidityStatus(data.humidity);
+                    
+                    document.getElementById('tempStatus').textContent = tempStatus.text;
+                    document.getElementById('tempStatus').className = tempStatus.class;
+                    
+                    document.getElementById('humidityStatus').textContent = humStatus.text;
+                    document.getElementById('humidityStatus').className = humStatus.class;
+                    
+                    document.getElementById('error-message').classList.add('hidden');
+                    
+                    // Update last updated time
+                    const now = new Date();
+                    document.getElementById('lastUpdated').textContent = now.toLocaleString();
+                    
+                    // Add data to charts
+                    addDataToCharts(now, data.temperature, data.humidity);
+                    
+                    // Add log entry
+                    addLogEntry(now, data.temperature, data.humidity);
+                    
+                    console.log(data);
+                })
+                .catch(error => {
+                    document.getElementById('error-message').classList.remove('hidden');
+                    document.getElementById('error-text').textContent = `Failed to fetch sensor data: ${error.message}`;
+                    document.getElementById('connectionStatus').textContent = 'Offline';
+                    document.getElementById('connectionStatus').className = 'text-red-500';
+                    console.error('Error:', error);
+                });
+        }
+
+        // Toggle dark mode
+        document.getElementById('darkModeToggle').addEventListener('click', function() {
+            document.body.classList.toggle('dark-mode');
+            const icon = this.querySelector('i');
+            if (document.body.classList.contains('dark-mode')) {
+                icon.classList.remove('fa-moon');
+                icon.classList.add('fa-sun');
+                
+                // Update chart colors for dark mode
+                temperatureChart.options.scales.x.grid.color = 'rgba(255, 255, 255, 0.1)';
+                temperatureChart.options.scales.y.grid.color = 'rgba(255, 255, 255, 0.1)';
+                humidityChart.options.scales.x.grid.color = 'rgba(255, 255, 255, 0.1)';
+                humidityChart.options.scales.y.grid.color = 'rgba(255, 255, 255, 0.1)';
+                
+                temperatureChart.update();
+                humidityChart.update();
+            } else {
+                icon.classList.remove('fa-sun');
+                icon.classList.add('fa-moon');
+                
+                // Update chart colors for light mode
+                temperatureChart.options.scales.x.grid.color = 'rgba(0, 0, 0, 0.05)';
+                temperatureChart.options.scales.y.grid.color = 'rgba(0, 0, 0, 0.05)';
+                humidityChart.options.scales.x.grid.color = 'rgba(0, 0, 0, 0.05)';
+                humidityChart.options.scales.y.grid.color = 'rgba(0, 0, 0, 0.05)';
+                
+                temperatureChart.update();
+                humidityChart.update();
+            }
+        });
+
+        // Toggle fullscreen
+        document.getElementById('fullscreenToggle').addEventListener('click', function() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    console.error(`Error attempting to enable fullscreen: ${err.message}`);
+                });
+                this.querySelector('i').classList.remove('fa-expand');
+                this.querySelector('i').classList.add('fa-compress');
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                    this.querySelector('i').classList.remove('fa-compress');
+                    this.querySelector('i').classList.add('fa-expand');
+                }
+            }
+        });
+
+        // Toggle pause updates
+        document.getElementById('pauseButton').addEventListener('click', function() {
+            updatePaused = !updatePaused;
+            if (updatePaused) {
+                this.innerHTML = '<i class="fas fa-play mr-2"></i> Resume Updates';
+                this.classList.remove('bg-yellow-500', 'hover:bg-yellow-600');
+                this.classList.add('bg-green-500', 'hover:bg-green-600');
+                clearInterval(updateInterval);
+            } else {
+                this.innerHTML = '<i class="fas fa-pause mr-2"></i> Pause Updates';
+                this.classList.remove('bg-green-500', 'hover:bg-green-600');
+                this.classList.add('bg-yellow-500', 'hover:bg-yellow-600');
+                fetchData();
+                updateInterval = setInterval(fetchData, 5000);
+            }
+        });
+
+        // Clear log
+        document.getElementById('clearLogButton').addEventListener('click', function() {
+            document.getElementById('dataLog').innerHTML = '';
+        });
+
+        // Update uptime every second
+        setInterval(updateUptime, 1000);
+
+        // Fetch data immediately and then every 5 seconds
+        fetchData();
+        updateInterval = setInterval(fetchData, 5000);
+
+        // LED Control Functions
+        function hexToRgb(hex) {
+            // Remove # if present
+            hex = hex.replace('#', '');
+            
+            // Parse the hex values
+            const r = parseInt(hex.substring(0, 2), 16);
+            const g = parseInt(hex.substring(2, 4), 16);
+            const b = parseInt(hex.substring(4, 6), 16);
+            
+            return { r, g, b };
+        }
+
+        function rgbToHex(r, g, b) {
+            return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+        }
+
+        function updateLedPreview() {
+            const color = document.getElementById('colorPicker').value;
+            const brightness = document.getElementById('brightnessSlider').value;
+            const rgb = hexToRgb(color);
+            
+            // Apply brightness to preview
+            const adjustedR = Math.floor(rgb.r * brightness / 255);
+            const adjustedG = Math.floor(rgb.g * brightness / 255);
+            const adjustedB = Math.floor(rgb.b * brightness / 255);
+            
+            const preview = document.getElementById('ledPreview');
+            preview.style.backgroundColor = rgbToHex(adjustedR, adjustedG, adjustedB);
+            preview.style.boxShadow = `0 0 20px rgba(${adjustedR}, ${adjustedG}, ${adjustedB}, 0.5)`;
+        }
+
+        function setPresetColor(hexColor) {
+            document.getElementById('colorPicker').value = hexColor;
+            updateLedPreview();
+        }
+
+        function applyLedSettings() {
+            const color = hexToRgb(document.getElementById('colorPicker').value);
+            const brightness = parseInt(document.getElementById('brightnessSlider').value);
+            const effect = document.getElementById('ledEffect').value;
+            
+            const ledData = {
+                r: color.r,
+                g: color.g,
+                b: color.b,
+                brightness: brightness,
+                effect: effect
+            };
+            
+            fetch('/led', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(ledData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('LED settings applied:', data);
+                showNotification('LED Updated', `Color set to RGB(${color.r}, ${color.g}, ${color.b}) with ${effect} effect`);
+            })
+            .catch(error => {
+                console.error('Error applying LED settings:', error);
+                document.getElementById('error-message').classList.remove('hidden');
+                document.getElementById('error-text').textContent = `Failed to update LED: ${error.message}`;
+            });
+        }
+
+        function getLedStatus() {
+            fetch('/led-status')
+                .then(response => response.json())
+                .then(data => {
+                    // Update color picker
+                    const hexColor = rgbToHex(data.r, data.g, data.b);
+                    document.getElementById('colorPicker').value = hexColor;
+                    
+                    // Update brightness slider
+                    document.getElementById('brightnessSlider').value = data.brightness;
+                    document.getElementById('brightnessValue').textContent = data.brightness;
+                    
+                    // Update effect dropdown
+                    document.getElementById('ledEffect').value = data.effect;
+                    
+                    // Update preview
+                    updateLedPreview();
+                })
+                .catch(error => {
+                    console.error('Error getting LED status:', error);
+                });
+        }
+
+        // Show notification function (if not already defined)
+        function showNotification(title, message) {
+            const notification = document.getElementById('notification');
+            const notificationTitle = document.getElementById('notification-title');
+            const notificationMessage = document.getElementById('notification-message');
+            
+            notificationTitle.textContent = title;
+            notificationMessage.textContent = message;
+            
+            notification.classList.add('show');
+            
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 5000);
+        }
+
+        // Add event listeners for LED controls
+        document.addEventListener('DOMContentLoaded', function() {
+            // Color picker change
+            const colorPicker = document.getElementById('colorPicker');
+            if (colorPicker) {
+                colorPicker.addEventListener('input', updateLedPreview);
+            }
+            
+            // Brightness slider change
+            const brightnessSlider = document.getElementById('brightnessSlider');
+            if (brightnessSlider) {
+                brightnessSlider.addEventListener('input', function() {
+                    document.getElementById('brightnessValue').textContent = this.value;
+                    updateLedPreview();
+                });
+            }
+            
+            // Apply button click
+            const applyLedButton = document.getElementById('applyLedButton');
+            if (applyLedButton) {
+                applyLedButton.addEventListener('click', applyLedSettings);
+            }
+            
+            // Get initial LED status
+            getLedStatus();
+        });
+    </script>
+</body>
+</html> 
