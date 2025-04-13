@@ -209,10 +209,11 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## 📬 Contact
 
-Project Link: [https://github.com/yourusername/esp32-cloud-bridge](https://github.com/yourusername/esp32-cloud-bridge)
+Project Link: [https://github.com/opestro/esp32-3-webserver/](https://github.com/opestro/esp32-3-webserver)
 
 ---
 
 <p align="center">
-  Made with ❤️ for the IoT community
+  Made by Mehdi H. with ❤️ for the IoT community <br/>
+CSCClub of USDBLIDA
 </p>
